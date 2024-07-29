@@ -67,3 +67,72 @@ def get_bot_author_users():
     return active_bot_author_ids
 
 
+
+
+def get_discord_users():
+    request_url = make_discord_users_request()
+    response = requests.get(request_url, headers=config.AUTH)
+    if response.status_code != 200:
+        raise APIException("Could not retrieve discord users", request_url, response)
+    users = json.loads(response.text)["results"]
+    discord_users = {}
+    for user in users:
+        discord_users[user["user"]] = user["uid"]
+
+    return discord_users
+
+
+def get_author_name_by_id(user_id: str):
+    if user_id not in author_names.keys():
+        request_url = f"{config.DISCORD_USER_INFO}?user={user_id}"
+        response = requests.get(request_url, headers=config.AUTH)
+        user = json.loads(response.text)
+        if response.status_code != 200 or len(user["results"]) == 0:
+            print(f"AI Arena id {user_id} does not have a linked discord account, "
+                  f"falling back to getting ai arena name", request_url, response)
+            request_url = f"{config.USER_INFO}/{user_id}"
+            response = requests.get(request_url, headers=config.AUTH)
+            if response.status_code != 200:
+                raise APIException(f"An AI Arena user with id {user_id} could not be found. CRITICAL ERROR,"
+                                   f"this ID is tied to a bot, but the id doesn't exist", request_url, response)
+            user = json.loads(response.text)
+            author_names[user_id] = [user["username"], False]
+            print(author_names[user_id])
+            return author_names[user_id]
+        # discord id exists
+        else:
+            author_names[user_id] = [user["results"][0]["uid"], False]
+            author_names[user_id][1] = True
+    return author_names[user_id]
+
+
+def get_bot_id_by_name(bot_name: str):
+    if bot_name not in bot_ids.keys():
+        request_url = f"{config.BOT_INFO}?name={bot_name}"
+        response = requests.get(request_url, headers=config.AUTH)
+        if response.status_code != 200:
+            raise APIException(f"A bot with the name {bot_name} could not be located.", request_url, response)
+        bot = json.loads(response.text)
+        if len(bot["results"]) == 0:
+            raise APIException(f"A bot with the name {bot_name} could not be located.", request_url, response)
+        bot_ids[bot_name] = bot["results"][0]["id"]
+    return bot_ids[bot_name]
+
+
+def get_bot_info(bot_id: str) -> dict:
+    request_url = f"{config.BOT_INFO}{bot_id}/"
+    response = requests.get(request_url, headers=config.AUTH)
+    if response.status_code != 200:
+        raise APIException(f"A bot with id {bot_id} could not be located.", request_url, response)
+    bot_info = json.loads(response.text)
+    bot_info["author_info"] = get_author_name_by_id(bot_info["user"])
+    return bot_info
+
+
+def download_replay(replay_file: str, won: bool, file_path: str):
+    if replay_file is None:
+        return False
+    result = "won"
+    if not won:
+        result = "loss"
+    response = requests.get(replay_file, headers=config.AUTH)
