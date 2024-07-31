@@ -223,3 +223,51 @@ def get_bot_matches(bot_name: str, bot_id: str, days: int, only_losses: bool, ta
                 if num_files >= limit:
                     break
 
+
+
+
+
+
+if tag:
+        # append {tag_name} to replay files
+        for file in glob.glob(file_path + "/*.SC2Replay"):
+            new_name = file.replace(".SC2Replay", f"___{tag}.SC2Replay")
+            os.rename(file, new_name)
+    print(num_files)
+    return file_path
+
+
+def get_match_by_tag(tag_name: str, days: int) -> str:
+    letters = string.ascii_lowercase
+    file_path = config.REPLAYS_DIR + ''.join(random.choice(letters) for i in range(10))
+    Path(file_path).mkdir(parents=True, exist_ok=False)
+    today = datetime.datetime.now()
+    days = datetime.timedelta(days=days + 1)
+    start = today-days
+    try:
+        request_url = f"{config.MATCHES}?tags={tag_name}&ordering=-id"
+        response = requests.get(request_url, headers=config.AUTH)
+        if response.status_code != 200:
+            raise APIException(f"Failed to get matches with tag {tag_name}.", request_url, response)
+        matches = json.loads(response.text)
+        for match in matches["results"]:
+            year, month, day = match["created"].split('-')
+            day = day.split('T')[0]
+            match_date = datetime.datetime(int(year), int(month), int(day))
+            if match_date > start:
+                match_id = match["id"]
+                download_replay(str(match["result"]["bot1_name"]), str(match["result"]["winner"]), match_id, file_path)
+            else:
+                # matches are in reverse order so the rest are too far in the past!
+                break
+
+    except Exception as e:
+        shutil.rmtree(file_path)
+        raise e
+
+    # append {tag_name} to replay files
+    for file in glob.glob(file_path + "/*.SC2Replay"):
+        new_name = file.replace(".SC2Replay", f"___{tag_name}.SC2Replay")
+        os.rename(file, new_name)
+
+    return file_path
